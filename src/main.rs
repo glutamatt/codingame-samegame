@@ -29,7 +29,7 @@ fn explore_board(board: &Vec<Vec<i32>>) -> Vec<Group> {
                 in_any_group.insert((x, y));
                 explore_group(x, y, color, &mut group, &mut in_any_group, &board);
                 if group.pos.len() > 1 {
-                    eprintln!("Debug group... {:?}", group);
+                    //eprintln!("Debug group... {:?}", group);
                     groups.push(group);
                 }
             }
@@ -75,7 +75,7 @@ fn explore_group(
     }
 }
 
-fn brain(board: &Vec<Vec<i32>>) -> (u32, u32) {
+fn brain(board: &Vec<Vec<i32>>) -> ((u32, u32), u32) {
     let mut groups = explore_board(&board);
 
     let mut init: HashMap<i32, usize> = HashMap::new();
@@ -87,8 +87,7 @@ fn brain(board: &Vec<Vec<i32>>) -> (u32, u32) {
         }
         c
     });
-
-    eprintln!("COLOR COUNTER : {:?}", colors);
+    //eprintln!("COLOR COUNTER : {:?}", colors);
 
     let lowest_color = {
         let mut colors = colors.iter().collect::<Vec<_>>();
@@ -106,10 +105,79 @@ fn brain(board: &Vec<Vec<i32>>) -> (u32, u32) {
     better.sort_by_key(|g| g.1);
     better.reverse();
 
-    return *better[0].0.pos.iter().collect::<Vec<_>>()[0];
+    turn_move(board, &better[0].0.pos);
+
+    let (x, y) = better[0].0.pos.iter().next().unwrap();
+
+    return ((*x, *y), turn_score(better[0].0.pos.len()));
+}
+
+fn make_drops(board: &Vec<String>) -> Vec<String> {
+    let empty = String::from("               ");
+    let mut copied = board
+        .iter()
+        .map(|col| {
+            let t = col.clone().replace(" ", "");
+            format!("{: >15}", t)
+        })
+        .filter_map(|col| {
+            if col != empty {
+                Some(col.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    for _i in 0..(15 - (copied.len())) {
+        copied.push(empty.clone());
+    }
+
+    eprintln!("-----------------");
+    copied.iter().for_each(|c| eprintln!("|{c}|"));
+    eprintln!("-----------------");
+    copied
+}
+
+fn turn_score(pos_len: usize) -> u32 {
+    let n = pos_len - 2;
+    (n * n) as u32
+}
+
+fn turn_move(board: &Vec<Vec<i32>>, group: &HashSet<(u32, u32)>) -> Vec<String> {
+    let mut string_board = (0..15)
+        .map(|x| {
+            (0..15)
+                .map(move |y| {
+                    if group.contains(&(x, y)) {
+                        return -1;
+                    } else {
+                        return board[y as usize][x as usize];
+                    }
+                })
+                .map(|c| match c {
+                    0 => 'r',
+                    1 => 'g',
+                    2 => 'b',
+                    3 => 'y',
+                    4 => 'p',
+                    _ => ' ',
+                })
+                .collect::<Vec<_>>()
+        })
+        .map(|col| col.iter().collect::<String>())
+        .collect::<Vec<_>>();
+
+    //string_board.iter().for_each(|c| eprintln!("{c}"));
+
+    let score = turn_score(group.len());
+    eprintln!("\nDROP NOW score {score}\n");
+
+    make_drops(&mut string_board);
+    string_board
 }
 
 fn main() {
+    let mut total_score: u32 = 0;
     loop {
         let board = (0..15 as usize)
             .map(|_i| {
@@ -122,8 +190,11 @@ fn main() {
             })
             .collect::<Vec<_>>();
 
-        let (x, y) = brain(&board);
+        let ((x, y), score) = brain(&board);
         let yy = 14 - y;
-        println!("{x} {yy} Hello SameGame\\n:-)"); // Selected tile "x y [message]".
+
+        total_score += score;
+
+        println!("{x} {yy} with score {total_score}"); // Selected tile "x y [message]".
     }
 }
