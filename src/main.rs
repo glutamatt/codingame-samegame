@@ -1,13 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
-use std::io;
+use std::env;
+use std::io::{self, BufRead, BufReader, Read};
 
 macro_rules! parse_input {
     ($x:expr, $t:ident) => {
         $x.trim().parse::<$t>().unwrap()
     };
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Group {
     pos: HashSet<(u32, u32)>,
     color: i32,
@@ -16,7 +17,7 @@ struct Group {
 fn explore_board(board: &Vec<Vec<i32>>) -> Vec<Group> {
     let mut in_any_group: HashSet<(u32, u32)> = HashSet::new();
 
-    let mut groups: Vec<Group> = vec![];
+    let mut groups: Vec<Group> = Vec::new();
 
     for y in 0..15 {
         for x in 0..15 {
@@ -75,7 +76,7 @@ fn explore_group(
     }
 }
 
-fn brain(board: &Vec<Vec<i32>>) -> ((u32, u32), u32) {
+fn brain(board: &Vec<Vec<i32>>) -> Group {
     let mut groups = explore_board(&board);
 
     let mut init: HashMap<i32, usize> = HashMap::new();
@@ -91,7 +92,7 @@ fn brain(board: &Vec<Vec<i32>>) -> ((u32, u32), u32) {
 
     let lowest_color = {
         let mut colors = colors.iter().collect::<Vec<_>>();
-        colors.sort_by_key(|(a, b)| **b);
+        colors.sort_by_key(|(_a, b)| **b);
         colors[0].0
     };
 
@@ -107,9 +108,7 @@ fn brain(board: &Vec<Vec<i32>>) -> ((u32, u32), u32) {
 
     turn_move(board, &better[0].0.pos);
 
-    let (x, y) = better[0].0.pos.iter().next().unwrap();
-
-    return ((*x, *y), turn_score(better[0].0.pos.len()));
+    better[0].0.clone()
 }
 
 fn make_drops(board: &Vec<String>) -> Vec<String> {
@@ -117,8 +116,8 @@ fn make_drops(board: &Vec<String>) -> Vec<String> {
     let mut copied = board
         .iter()
         .map(|col| {
-            let t = col.clone().replace(" ", "");
-            format!("{: >15}", t)
+            let t = col.clone().replace("⚫", "");
+            format!("{:⚫>15}", t)
         })
         .filter_map(|col| {
             if col != empty {
@@ -155,19 +154,21 @@ fn turn_move(board: &Vec<Vec<i32>>, group: &HashSet<(u32, u32)>) -> Vec<String> 
                     }
                 })
                 .map(|c| match c {
-                    0 => 'r',
-                    1 => 'g',
-                    2 => 'b',
-                    3 => 'y',
-                    4 => 'p',
-                    _ => ' ',
+                    0 => '🟥',
+                    1 => '🟩',
+                    2 => '🟦',
+                    3 => '🟨',
+                    4 => '🟪',
+                    _ => '⚫',
                 })
                 .collect::<Vec<_>>()
         })
         .map(|col| col.iter().collect::<String>())
         .collect::<Vec<_>>();
 
-    //string_board.iter().for_each(|c| eprintln!("{c}"));
+    eprintln!("-----------------");
+    string_board.iter().for_each(|c| eprintln!("|{c}|"));
+    eprintln!("-----------------");
 
     let score = turn_score(group.len());
     eprintln!("\nDROP NOW score {score}\n");
@@ -176,25 +177,41 @@ fn turn_move(board: &Vec<Vec<i32>>, group: &HashSet<(u32, u32)>) -> Vec<String> 
     string_board
 }
 
+fn raw_read<T: Read>(buf: T) -> Vec<Vec<i32>> {
+    let mut r = BufReader::new(buf);
+    eprintln!("vv __  raw_read __vv");
+    (0..15 as usize)
+        .map(|_i| {
+            let mut inputs = String::new();
+            r.read_line(&mut inputs).unwrap();
+            eprint!("{inputs}");
+            return inputs
+                .split_whitespace()
+                .map(|c| parse_input!(c, i32))
+                .collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>()
+}
+
 fn main() {
+    if env::args().any(|a| a == "--debug") {
+        let board = raw_read(io::stdin());
+        brain(&board);
+        eprintln!("--debug so break");
+        return;
+    }
+
     let mut total_score: u32 = 0;
+
     loop {
-        let board = (0..15 as usize)
-            .map(|_i| {
-                let mut inputs = String::new();
-                io::stdin().read_line(&mut inputs).unwrap();
-                return inputs
-                    .split_whitespace()
-                    .map(|c| parse_input!(c, i32))
-                    .collect::<Vec<_>>();
-            })
-            .collect::<Vec<_>>();
+        let board = raw_read(io::stdin());
+        let g = brain(&board);
+        // //let (x, y) = better[0].0.pos.iter().next().unwrap();
+        //return ((*x, *y), turn_score(better[0].0.pos.len()));
 
-        let ((x, y), score) = brain(&board);
+        let (x, y) = g.pos.iter().next().unwrap();
         let yy = 14 - y;
-
-        total_score += score;
-
-        println!("{x} {yy} with score {total_score}"); // Selected tile "x y [message]".
+        total_score += turn_score(g.pos.len());
+        println!("{x} {yy} with score {total_score}");
     }
 }
