@@ -150,6 +150,7 @@ fn raw_read<T: Read>(buf: T) -> Vec<String> {
 }
 
 fn print_debug(b: &Vec<String>) {
+    //return;
     eprintln!("-----------------");
     b.iter().for_each(|c| eprintln!("|{c}|"));
     eprintln!("-----------------");
@@ -211,13 +212,25 @@ struct Move {
 }
 impl Eval {
     fn expand(&mut self) -> bool {
-        let mut cont = false;
-
         if !self.moves.is_empty() {
-            let first_move = self.moves.first_mut().unwrap();
-            cont = first_move.simulate(&self.board);
-        }
+            let selected_move = self
+                .moves
+                .iter_mut()
+                .filter(|m| match &m.eval {
+                    Some(e) => !e.explored,
+                    _ => true,
+                })
+                .next();
 
+            if let Some(mov) = selected_move {
+                if !mov.simulate(&self.board) {
+                    self.explored = self
+                        .moves
+                        .iter()
+                        .all(|m| m.eval.as_ref().map(|e| e.explored).unwrap_or(false));
+                }
+            }
+        }
         self.total_score = self
             .moves
             .iter()
@@ -225,7 +238,7 @@ impl Eval {
             .max()
             .unwrap();
 
-        cont
+        !self.explored
     }
 }
 
@@ -262,7 +275,7 @@ impl Move {
                     total_score,
                     board: new_board,
                     moves,
-                    explored: false,
+                    explored: moves_is_empty,
                 });
 
                 !moves_is_empty
@@ -289,8 +302,13 @@ fn main() {
             .collect(),
     };
 
+    let mut max_score = 0;
+
     while root.expand() {
-        eprintln!("root.total_score ==> {}", root.total_score);
+        if root.total_score > max_score {
+            max_score = root.total_score;
+            eprintln!("root.total_score ==> {}", root.total_score);
+        }
     }
     eprintln!("root.total_score ==> {}", root.total_score);
 }
