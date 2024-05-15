@@ -199,8 +199,59 @@ fn drop(board: &Vec<String>) -> Vec<String> {
     }
     copied
 }
+#[derive(Debug)]
+struct Eval {
+    board: Vec<String>,
+    moves: Vec<Move>,
+}
+
+#[derive(Debug)]
+struct Move {
+    pos: HashSet<(u32, u32)>,
+    eval: Option<Eval>,
+}
+impl Eval {
+    fn expand(&mut self) {
+        if !self.moves.is_empty() {
+            let a = self.moves.first_mut().unwrap();
+            a.simulate();
+        }
+    }
+}
+
+impl Move {
+    fn simulate(&mut self) {
+        match self.eval.as_mut() {
+            None => {
+                self.eval = Some(Eval {
+                    board: Vec::new(),
+                    moves: Vec::from([Move {
+                        eval: None,
+                        pos: HashSet::from([(1, 2), (3, 4)]),
+                    }]),
+                })
+            }
+            Some(a) => a.expand(),
+        }
+    }
+}
 
 fn main() {
+    let mut eval = Eval {
+        board: vec!["aaa".to_string(), "bbb".to_string()],
+        moves: Vec::from([Move {
+            eval: None,
+            pos: HashSet::from([(1, 2), (3, 4)]),
+        }]),
+    };
+
+    eval.expand();
+    eval.expand();
+    eval.expand();
+    eval.expand();
+    eval.expand();
+    eprintln!("DEBUG EVAL MOVE : {:?}", eval);
+    return;
     if env::args().any(|a| a == "--debug") {
         let mut board = raw_read(io::stdin());
         print_debug(&board);
