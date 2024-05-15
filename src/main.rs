@@ -150,7 +150,6 @@ fn raw_read<T: Read>(buf: T) -> Vec<String> {
 }
 
 fn print_debug(b: &Vec<String>) {
-    //return;
     eprintln!("-----------------");
     b.iter().for_each(|c| eprintln!("|{c}|"));
     eprintln!("-----------------");
@@ -210,6 +209,7 @@ struct Move {
     eval: Option<Eval>,
     score: u32,
 }
+
 impl Eval {
     fn expand(&mut self) -> bool {
         if !self.moves.is_empty() {
@@ -256,7 +256,7 @@ impl Move {
                     pos: g.pos.clone(),
                     score: turn_score(g.pos.len()),
                 });
-                print_debug(&new_board);
+                //print_debug(&new_board);
                 let moves: Vec<Move> = moves.collect();
                 let moves_is_empty = moves.is_empty();
                 let total_score = {
@@ -307,6 +307,24 @@ fn main() {
     while root.expand() {
         if root.total_score > max_score {
             max_score = root.total_score;
+
+            let mut current = Some(&root);
+            let mut sc = 0;
+            while current.is_some() {
+                print_debug(&current.unwrap().board);
+                current = current
+                    .unwrap()
+                    .moves
+                    .iter()
+                    .filter(|m| m.eval.is_some())
+                    .max_by_key(|m| m.eval.as_ref().unwrap().total_score + m.score)
+                    .map(|m| {
+                        sc += m.score;
+                        eprintln!("m.score {} -> {}", m.score, sc);
+                        m.eval.as_ref().unwrap()
+                    })
+            }
+
             eprintln!("root.total_score ==> {}", root.total_score);
         }
     }
