@@ -214,9 +214,9 @@ impl Eval {
             return false;
         }
 
-        let a = self.moves.first_mut().unwrap();
+        let first_move = self.moves.first_mut().unwrap();
 
-        let cont = a.simulate(&self.board);
+        let cont = first_move.simulate(&self.board);
 
         self.total_score = self
             .moves
