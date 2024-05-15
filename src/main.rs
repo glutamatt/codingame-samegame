@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::io::{self, BufRead, BufReader, Read};
 
 macro_rules! parse_input {
@@ -29,7 +28,6 @@ fn explore_board(board: &Vec<String>) -> Vec<Group> {
                 in_any_group.insert((x, y as u32));
                 explore_group(x, y as u32, color, &mut group, &mut in_any_group, &board);
                 if group.pos.len() > 1 {
-                    //eprintln!("Debug group... {:?}", group);
                     groups.push(group);
                 }
             }
@@ -92,9 +90,7 @@ fn brain(board: &Vec<String>) -> Option<Group> {
     if colors.is_empty() {
         return None;
     }
-
     eprintln!("COLOR COUNTER : {:?}", colors);
-
     let lowest_color = {
         let mut colors = colors.iter().collect::<Vec<_>>();
         colors.sort_by_key(|(_a, b)| **b);
@@ -203,18 +199,28 @@ fn board_drop(board: &Vec<String>) -> Vec<String> {
 struct Eval {
     board: Vec<String>,
     moves: Vec<Move>,
+    total_score: u32,
 }
 
 #[derive(Debug)]
 struct Move {
     pos: HashSet<(u32, u32)>,
     eval: Option<Eval>,
+    score: u32,
 }
 impl Eval {
     fn expand(&mut self) {
         if !self.moves.is_empty() {
             let a = self.moves.first_mut().unwrap();
+
             a.simulate(&self.board);
+
+            self.total_score = self
+                .moves
+                .iter()
+                .map(|m| m.score + m.eval.as_ref().map(|e| e.total_score).unwrap_or(0))
+                .max()
+                .unwrap();
         }
     }
 }
@@ -222,6 +228,7 @@ impl Eval {
 impl Move {
     fn simulate(&mut self, board: &Vec<String>) {
         match self.eval.as_mut() {
+            Some(a) => a.expand(),
             None => {
                 let new_board = board_depop(board, &self.pos);
                 let new_board = board_drop(&new_board);
@@ -230,16 +237,28 @@ impl Move {
                 let moves = groups.iter().map(|g| Move {
                     eval: None,
                     pos: g.pos.clone(),
+                    score: turn_score(g.pos.len()),
                 });
-
                 print_debug(&new_board);
+                let moves: Vec<Move> = moves.collect();
+                let total_score = {
+                    if moves.is_empty()
+                        && new_board
+                            .iter()
+                            .all(|s| s == "⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫")
+                    {
+                        1000
+                    } else {
+                        0
+                    }
+                };
 
                 self.eval = Some(Eval {
+                    total_score,
                     board: new_board,
-                    moves: moves.collect(),
+                    moves,
                 })
             }
-            Some(a) => a.expand(),
         }
     }
 }
@@ -249,49 +268,20 @@ fn main() {
     let groups = explore_board(&board);
 
     let mut root = Eval {
+        total_score: 0,
         board: board,
         moves: groups
             .iter()
             .map(|g| Move {
                 eval: None,
                 pos: g.pos.clone(),
+                score: turn_score(g.pos.len()),
             })
             .collect(),
     };
 
-    root.expand();
-    root.expand();
-    root.expand();
-    root.expand();
-    root.expand();
-
-    return;
-    if env::args().any(|a| a == "--debug") {
-        let mut board = raw_read(io::stdin());
-        print_debug(&board);
-
-        loop {
-            let gr = brain(&board);
-            if gr.is_none() {
-                break;
-            }
-            let gr = gr.unwrap();
-            let sc = turn_score(gr.pos.len());
-            eprintln!("Score: {sc}");
-            let dep = board_depop(&board, &gr.pos);
-            print_debug(&dep);
-            let dropped = board_drop(&dep);
-            print_debug(&dropped);
-
-            board = dropped;
-        }
-
-        eprintln!("--debug so break");
-        return;
-    }
-
-    loop {
-        eprint!("no debug loop");
-        return;
+    for _i in 0..21 {
+        root.expand();
+        eprintln!("root.total_score ==> {}", root.total_score);
     }
 }
