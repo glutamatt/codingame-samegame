@@ -200,6 +200,7 @@ struct Eval {
     board: Vec<String>,
     moves: Vec<Move>,
     total_score: u32,
+    explored: bool,
 }
 
 #[derive(Debug)]
@@ -261,6 +262,7 @@ impl Move {
                     total_score,
                     board: new_board,
                     moves,
+                    explored: false,
                 });
 
                 !moves_is_empty
@@ -275,6 +277,7 @@ fn main() {
 
     let mut root = Eval {
         total_score: 0,
+        explored: false,
         board: board,
         moves: groups
             .iter()
