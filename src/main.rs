@@ -209,24 +209,28 @@ struct Move {
     score: u32,
 }
 impl Eval {
-    fn expand(&mut self) {
-        if !self.moves.is_empty() {
-            let a = self.moves.first_mut().unwrap();
-
-            a.simulate(&self.board);
-
-            self.total_score = self
-                .moves
-                .iter()
-                .map(|m| m.score + m.eval.as_ref().map(|e| e.total_score).unwrap_or(0))
-                .max()
-                .unwrap();
+    fn expand(&mut self) -> bool {
+        if self.moves.is_empty() {
+            return false;
         }
+
+        let a = self.moves.first_mut().unwrap();
+
+        let cont = a.simulate(&self.board);
+
+        self.total_score = self
+            .moves
+            .iter()
+            .map(|m| m.score + m.eval.as_ref().map(|e| e.total_score).unwrap_or(0))
+            .max()
+            .unwrap();
+
+        cont
     }
 }
 
 impl Move {
-    fn simulate(&mut self, board: &Vec<String>) {
+    fn simulate(&mut self, board: &Vec<String>) -> bool {
         match self.eval.as_mut() {
             Some(a) => a.expand(),
             None => {
@@ -241,8 +245,9 @@ impl Move {
                 });
                 print_debug(&new_board);
                 let moves: Vec<Move> = moves.collect();
+                let moves_is_empty = moves.is_empty();
                 let total_score = {
-                    if moves.is_empty()
+                    if moves_is_empty
                         && new_board
                             .iter()
                             .all(|s| s == "⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫")
@@ -257,7 +262,9 @@ impl Move {
                     total_score,
                     board: new_board,
                     moves,
-                })
+                });
+
+                !moves_is_empty
             }
         }
     }
@@ -280,8 +287,7 @@ fn main() {
             .collect(),
     };
 
-    for _i in 0..21 {
-        root.expand();
+    while root.expand() {
         eprintln!("root.total_score ==> {}", root.total_score);
     }
 }
