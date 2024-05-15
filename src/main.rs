@@ -214,20 +214,26 @@ impl Eval {
     fn expand(&mut self) {
         if !self.moves.is_empty() {
             let a = self.moves.first_mut().unwrap();
-            a.simulate();
+            a.simulate(&self.board);
         }
     }
 }
 
 impl Move {
-    fn simulate(&mut self) {
+    fn simulate(&mut self, board: &Vec<String>) {
         match self.eval.as_mut() {
             None => {
                 self.eval = Some(Eval {
-                    board: Vec::new(),
+                    // TODO : transform the board, then explore the new board to get possible moves
+                    board: board.clone(),
                     moves: Vec::from([Move {
                         eval: None,
-                        pos: HashSet::from([(1, 2), (3, 4)]),
+                        pos: self
+                            .pos
+                            .clone()
+                            .iter()
+                            .map(|(x, y)| (x + 1, y + 1))
+                            .collect(),
                     }]),
                 })
             }
@@ -237,20 +243,20 @@ impl Move {
 }
 
 fn main() {
-    let mut eval = Eval {
+    let mut root = Eval {
         board: vec!["aaa".to_string(), "bbb".to_string()],
         moves: Vec::from([Move {
             eval: None,
-            pos: HashSet::from([(1, 2), (3, 4)]),
+            pos: HashSet::from([(0, 0)]),
         }]),
     };
 
-    eval.expand();
-    eval.expand();
-    eval.expand();
-    eval.expand();
-    eval.expand();
-    eprintln!("DEBUG EVAL MOVE : {:?}", eval);
+    root.expand();
+    root.expand();
+    root.expand();
+    root.expand();
+    root.expand();
+    eprintln!("DEBUG EVAL MOVE : {:#?}", root);
     return;
     if env::args().any(|a| a == "--debug") {
         let mut board = raw_read(io::stdin());
