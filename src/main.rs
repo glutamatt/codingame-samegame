@@ -210,13 +210,12 @@ struct Move {
 }
 impl Eval {
     fn expand(&mut self) -> bool {
-        if self.moves.is_empty() {
-            return false;
+        let mut cont = false;
+
+        if !self.moves.is_empty() {
+            let first_move = self.moves.first_mut().unwrap();
+            cont = first_move.simulate(&self.board);
         }
-
-        let first_move = self.moves.first_mut().unwrap();
-
-        let cont = first_move.simulate(&self.board);
 
         self.total_score = self
             .moves
@@ -290,4 +289,5 @@ fn main() {
     while root.expand() {
         eprintln!("root.total_score ==> {}", root.total_score);
     }
+    eprintln!("root.total_score ==> {}", root.total_score);
 }
