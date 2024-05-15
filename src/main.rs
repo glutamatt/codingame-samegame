@@ -127,7 +127,7 @@ fn raw_read<T: Read>(buf: T) -> Vec<String> {
         .map(|_i| {
             let mut inputs = String::new();
             r.read_line(&mut inputs).unwrap();
-            eprint!("{inputs}");
+            //eprint!("{inputs}");
             return inputs
                 .split_whitespace()
                 .map(|c| parse_input!(c, i32))
@@ -159,7 +159,7 @@ fn print_debug(b: &Vec<String>) {
     eprintln!("-----------------");
 }
 
-fn depop(board: &Vec<String>, group: &Group) -> Vec<String> {
+fn board_depop(board: &Vec<String>, pos: &HashSet<(u32, u32)>) -> Vec<String> {
     board
         .iter()
         .enumerate()
@@ -167,7 +167,7 @@ fn depop(board: &Vec<String>, group: &Group) -> Vec<String> {
             col.chars()
                 .enumerate()
                 .map(move |(y, c)| {
-                    if group.pos.contains(&(x as u32, y as u32)) {
+                    if pos.contains(&(x as u32, y as u32)) {
                         return '⚫';
                     } else {
                         return c;
@@ -178,7 +178,7 @@ fn depop(board: &Vec<String>, group: &Group) -> Vec<String> {
         .collect()
 }
 
-fn drop(board: &Vec<String>) -> Vec<String> {
+fn board_drop(board: &Vec<String>) -> Vec<String> {
     let empty = String::from("⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫");
     let mut copied = board
         .iter()
@@ -223,18 +223,20 @@ impl Move {
     fn simulate(&mut self, board: &Vec<String>) {
         match self.eval.as_mut() {
             None => {
+                let new_board = board_depop(board, &self.pos);
+                let new_board = board_drop(&new_board);
+                let groups = explore_board(&new_board);
+
+                let moves = groups.iter().map(|g| Move {
+                    eval: None,
+                    pos: g.pos.clone(),
+                });
+
+                print_debug(&new_board);
+
                 self.eval = Some(Eval {
-                    // TODO : transform the board, then explore the new board to get possible moves
-                    board: board.clone(),
-                    moves: Vec::from([Move {
-                        eval: None,
-                        pos: self
-                            .pos
-                            .clone()
-                            .iter()
-                            .map(|(x, y)| (x + 1, y + 1))
-                            .collect(),
-                    }]),
+                    board: new_board,
+                    moves: moves.collect(),
                 })
             }
             Some(a) => a.expand(),
@@ -243,12 +245,18 @@ impl Move {
 }
 
 fn main() {
+    let board = raw_read(io::stdin());
+    let groups = explore_board(&board);
+
     let mut root = Eval {
-        board: vec!["aaa".to_string(), "bbb".to_string()],
-        moves: Vec::from([Move {
-            eval: None,
-            pos: HashSet::from([(0, 0)]),
-        }]),
+        board: board,
+        moves: groups
+            .iter()
+            .map(|g| Move {
+                eval: None,
+                pos: g.pos.clone(),
+            })
+            .collect(),
     };
 
     root.expand();
@@ -256,7 +264,7 @@ fn main() {
     root.expand();
     root.expand();
     root.expand();
-    eprintln!("DEBUG EVAL MOVE : {:#?}", root);
+
     return;
     if env::args().any(|a| a == "--debug") {
         let mut board = raw_read(io::stdin());
@@ -270,9 +278,9 @@ fn main() {
             let gr = gr.unwrap();
             let sc = turn_score(gr.pos.len());
             eprintln!("Score: {sc}");
-            let dep = depop(&board, &gr);
+            let dep = board_depop(&board, &gr.pos);
             print_debug(&dep);
-            let dropped = drop(&dep);
+            let dropped = board_drop(&dep);
             print_debug(&dropped);
 
             board = dropped;
