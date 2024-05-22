@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, BufReader, Read};
 
@@ -10,24 +11,27 @@ macro_rules! parse_input {
 #[derive(Debug, Clone)]
 struct Group {
     pos: HashSet<(u32, u32)>,
+    min_y: u32,
     color: char,
 }
 
-fn explore_board(board: &Vec<String>) -> Vec<Group> {
+fn explore_board(board: &[String]) -> Vec<Group> {
     let mut in_any_group: HashSet<(u32, u32)> = HashSet::new();
 
     let mut groups: Vec<Group> = Vec::new();
     for x in 0..15 {
         for y in 0..15 {
-            let color = board[y as usize].chars().nth(x as usize).unwrap();
+            let color = board[x as usize].chars().nth(14 - y as usize).unwrap();
             if color != '⚫' && !in_any_group.contains(&(x, y)) {
                 let mut group: Group = Group {
                     pos: vec![(x, y)].into_iter().collect(),
                     color,
+                    min_y: 0,
                 };
                 in_any_group.insert((x, y));
                 explore_group(x, y, color, &mut group, &mut in_any_group, &board);
                 if group.pos.len() > 1 {
+                    group.min_y = group.pos.iter().map(|(_, y)| *y).min().unwrap();
                     groups.push(group);
                 }
             }
@@ -44,11 +48,11 @@ fn explore_group(
     color: char,
     group: &mut Group,
     in_any_group: &mut HashSet<(u32, u32)>,
-    board: &Vec<String>,
+    board: &[String],
 ) {
     let mut search = |n_x: u32, n_y: u32| {
         if !in_any_group.contains(&(n_x, n_y)) {
-            let n_col = board[n_y as usize].chars().nth(n_x as usize).unwrap();
+            let n_col = board[n_x as usize].chars().nth(14 - n_y as usize).unwrap();
             if n_col == color {
                 group.pos.insert((n_x, n_y));
                 in_any_group.insert((n_x, n_y));
@@ -70,8 +74,9 @@ fn explore_group(
     }
 }
 
-fn rank_groups(board: &Vec<String>, groups: &mut Vec<Group>) {
+fn rank_groups(board: &[String], groups: &mut Vec<Group>) {
     let mut init: HashMap<char, usize> = HashMap::new();
+
     let colors = groups.iter().fold(&mut init, |c, g| {
         if let Some(counter) = c.get_mut(&g.color) {
             *counter += g.pos.len();
@@ -83,24 +88,19 @@ fn rank_groups(board: &Vec<String>, groups: &mut Vec<Group>) {
     if colors.is_empty() {
         return;
     }
-    //eprintln!("COLOR COUNTER : {:?}", colors);
     let lowest_color = {
-        let mut colors = colors.iter().collect::<Vec<_>>();
-        colors.sort_by_key(|(_a, b)| **b);
-        colors[0].0
+        let (c, _) = colors.iter().min_by_key(|(_, s)| *s).unwrap();
+        c
     };
-
-    //eprintln!("lowest_color : {:?}", lowest_color);
-
-    groups.reverse();
-    let mut better = groups
-        .iter()
-        .filter(|g| g.color == *lowest_color)
-        .map(|g| (g, g.pos.iter().map(|p| p.1).min().unwrap()))
-        .collect::<Vec<_>>();
-
-    better.sort_by_key(|g| g.1);
-    better.reverse();
+    groups.sort_unstable_by(|a, b| {
+        if a.color == *lowest_color && b.color != *lowest_color {
+            return Ordering::Less;
+        }
+        if b.color == *lowest_color && a.color != *lowest_color {
+            return Ordering::Greater;
+        }
+        a.min_y.cmp(&b.min_y)
+    });
 }
 
 fn turn_score(pos_len: usize) -> u32 {
@@ -109,7 +109,6 @@ fn turn_score(pos_len: usize) -> u32 {
 }
 fn raw_read<T: Read>(buf: T) -> Vec<String> {
     let mut r = BufReader::new(buf);
-    eprintln!("vv __  raw_read __vv");
     let int_board = (0..15 as usize)
         .map(|_i| {
             let mut inputs = String::new();
@@ -140,13 +139,11 @@ fn raw_read<T: Read>(buf: T) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
-fn print_debug(b: &Vec<String>) {
+fn print_debug(b: &[String]) {
     eprintln!("-----------------");
-    b.iter().for_each(|c| eprintln!("|{c}|"));
-    eprintln!("   -----------   ");
     for y in 0..15 {
         let row = (0..15)
-            .map(|x| b[x].chars().nth(14 - y).unwrap())
+            .map(|x| b[x].chars().nth(y).unwrap())
             .collect::<String>();
         eprintln!("|{row}|");
     }
@@ -158,11 +155,11 @@ fn board_depop(board: &Vec<String>, pos: &HashSet<(u32, u32)>) -> Vec<String> {
     board
         .iter()
         .enumerate()
-        .map(|(y, col)| {
+        .map(|(x, col)| {
             col.chars()
                 .enumerate()
-                .map(move |(x, c)| {
-                    if pos.contains(&(x as u32, y as u32)) {
+                .map(move |(y, c)| {
+                    if pos.contains(&(x as u32, 14 - y as u32)) {
                         return '⚫';
                     } else {
                         return c;
@@ -255,7 +252,6 @@ impl Move {
                     pos: g.pos.clone(),
                     score: turn_score(g.pos.len()),
                 });
-                //print_debug(&new_board);
                 let moves: Vec<Move> = moves.collect();
                 let moves_is_empty = moves.is_empty();
                 let total_score = {
@@ -326,7 +322,6 @@ fn main() {
 
             eprintln!("root.total_score ==> {}", root.total_score);
         }
-        return;
     }
     eprintln!("root.total_score ==> {}", root.total_score);
 }
