@@ -1,6 +1,8 @@
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, BufReader, Read};
+use std::rc::Rc;
 
 macro_rules! parse_input {
     ($x:expr, $t:ident) => {
@@ -202,35 +204,43 @@ struct Eval {
 #[derive(Debug)]
 struct Move {
     pos: HashSet<(u32, u32)>,
-    eval: Option<Eval>,
+    eval: Option<Rc<RefCell<Eval>>>,
     score: u32,
 }
 
 impl Eval {
-    fn expand(&mut self) -> bool {
+    fn expand(&mut self, memo: &mut HashMap<String, Rc<RefCell<Eval>>>) -> bool {
         if !self.moves.is_empty() {
             let selected_move = self
                 .moves
                 .iter_mut()
                 .filter(|m| match &m.eval {
-                    Some(e) => !e.explored,
+                    Some(e) => !e.as_ref().borrow().explored,
                     _ => true,
                 })
                 .next();
 
             if let Some(mov) = selected_move {
-                if !mov.simulate(&self.board) {
-                    self.explored = self
-                        .moves
-                        .iter()
-                        .all(|m| m.eval.as_ref().map(|e| e.explored).unwrap_or(false));
+                if !mov.simulate(&self.board, memo) {
+                    self.explored = self.moves.iter().all(|m| {
+                        m.eval
+                            .as_ref()
+                            .map(|e| e.as_ref().borrow().explored)
+                            .unwrap_or(false)
+                    });
                 }
             }
         }
         self.total_score = self
             .moves
             .iter()
-            .map(|m| m.score + m.eval.as_ref().map(|e| e.total_score).unwrap_or(0))
+            .map(|m| {
+                m.score
+                    + m.eval
+                        .as_ref()
+                        .map(|e| e.as_ref().borrow().total_score)
+                        .unwrap_or(0)
+            })
             .max()
             .unwrap();
 
@@ -239,41 +249,58 @@ impl Eval {
 }
 
 impl Move {
-    fn simulate(&mut self, board: &Vec<String>) -> bool {
+    fn simulate(
+        &mut self,
+        board: &Vec<String>,
+        memo: &mut HashMap<String, Rc<RefCell<Eval>>>,
+    ) -> bool {
         match self.eval.as_mut() {
-            Some(a) => a.expand(),
+            Some(a) => a.borrow_mut().expand(memo),
             None => {
                 let new_board = board_depop(board, &self.pos);
                 let new_board = board_drop(&new_board);
-                let groups = explore_board(&new_board);
 
-                let moves = groups.iter().map(|g| Move {
-                    eval: None,
-                    pos: g.pos.clone(),
-                    score: turn_score(g.pos.len()),
-                });
-                let moves: Vec<Move> = moves.collect();
-                let moves_is_empty = moves.is_empty();
-                let total_score = {
-                    if moves_is_empty
-                        && new_board
-                            .iter()
-                            .all(|s| s == "⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫")
-                    {
-                        1000
-                    } else {
-                        0
-                    }
-                };
+                let cache_key = new_board.join("");
 
-                self.eval = Some(Eval {
-                    total_score,
-                    board: new_board,
-                    moves,
-                    explored: moves_is_empty,
-                });
+                if let Some(cached) = memo.get(&cache_key) {
+                    //println!("cache hit");
+                    let cloned = cached.clone();
+                    let explored = cloned.as_ref().borrow().explored;
+                    self.eval = Some(cloned);
+                    !explored
+                } else {
+                    //println!("cache miss");
+                    let groups = explore_board(&new_board);
 
-                !moves_is_empty
+                    let moves = groups.iter().map(|g| Move {
+                        eval: None,
+                        pos: g.pos.clone(),
+                        score: turn_score(g.pos.len()),
+                    });
+                    let moves: Vec<Move> = moves.collect();
+                    let explored = moves.is_empty();
+                    let total_score = {
+                        if explored
+                            && new_board
+                                .iter()
+                                .all(|s| s == "⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫⚫")
+                        {
+                            1000
+                        } else {
+                            0
+                        }
+                    };
+
+                    let new_eval = Rc::new(RefCell::new(Eval {
+                        total_score,
+                        board: new_board,
+                        moves,
+                        explored,
+                    }));
+                    memo.insert(cache_key, new_eval.clone());
+                    self.eval = Some(new_eval);
+                    !explored
+                }
             }
         }
     }
@@ -299,26 +326,28 @@ fn main() {
 
     let mut max_score = 0;
 
-    while root.expand() {
+    let mut memo: HashMap<String, Rc<RefCell<Eval>>> = HashMap::new();
+
+    while root.expand(&mut memo) {
         if root.total_score > max_score {
             max_score = root.total_score;
 
-            let mut current = Some(&root);
-            let mut sc = 0;
-            while current.is_some() {
-                print_debug(&current.unwrap().board);
-                current = current
-                    .unwrap()
-                    .moves
-                    .iter()
-                    .filter(|m| m.eval.is_some())
-                    .max_by_key(|m| m.eval.as_ref().unwrap().total_score + m.score)
-                    .map(|m| {
-                        sc += m.score;
-                        eprintln!("m.score {} -> {}", m.score, sc);
-                        m.eval.as_ref().unwrap()
-                    })
-            }
+            //let mut current = Some(&root);
+            //let mut sc = 0;
+            //while current.is_some() {
+            //    print_debug(&current.unwrap().board);
+            //    current = current
+            //        .unwrap()
+            //        .moves
+            //        .iter()
+            //        .filter(|m| m.eval.is_some())
+            //        .max_by_key(|m| m.eval.as_ref().unwrap().total_score + m.score)
+            //        .map(|m| {
+            //            sc += m.score;
+            //            eprintln!("m.score {} -> {}", m.score, sc);
+            //            m.eval.as_ref().unwrap()
+            //        })
+            //}
 
             eprintln!("root.total_score ==> {}", root.total_score);
         }
