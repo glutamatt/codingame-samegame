@@ -1,4 +1,4 @@
-use rand::seq::IteratorRandom;
+use rand::seq::SliceRandom;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -40,8 +40,6 @@ fn explore_board(board: &[String]) -> Vec<Group> {
             }
         }
     }
-
-    rank_groups(board, &mut groups);
     return groups;
 }
 
@@ -75,35 +73,6 @@ fn explore_group(
     if x < 14 {
         search(x + 1, y);
     }
-}
-
-fn rank_groups(_board: &[String], groups: &mut Vec<Group>) {
-    let mut init: HashMap<char, usize> = HashMap::new();
-
-    let colors = groups.iter().fold(&mut init, |c, g| {
-        if let Some(counter) = c.get_mut(&g.color) {
-            *counter += g.pos.len();
-        } else {
-            c.insert(g.color, g.pos.len());
-        }
-        c
-    });
-    if colors.is_empty() {
-        return;
-    }
-    let lowest_color = {
-        let (c, _) = colors.iter().min_by_key(|(_, s)| *s).unwrap();
-        c
-    };
-    groups.sort_unstable_by(|a, b| {
-        if a.color == *lowest_color && b.color != *lowest_color {
-            return Ordering::Less;
-        }
-        if b.color == *lowest_color && a.color != *lowest_color {
-            return Ordering::Greater;
-        }
-        a.min_y.cmp(&b.min_y)
-    });
 }
 
 fn turn_score(pos_len: usize) -> u32 {
@@ -207,6 +176,8 @@ struct Move {
     pos: HashSet<(u32, u32)>,
     eval: Option<Rc<RefCell<Eval>>>,
     score: u32,
+    color: char,
+    min_y: u32,
 }
 
 impl Eval {
@@ -230,29 +201,60 @@ impl Eval {
         }
     }
 
+    fn rank_groups(&mut self) {
+        let mut init: HashMap<char, usize> = HashMap::new();
+
+        let colors = self.moves.iter().fold(&mut init, |c, g| {
+            if let Some(counter) = c.get_mut(&g.color) {
+                *counter += g.pos.len();
+            } else {
+                c.insert(g.color, g.pos.len());
+            }
+            c
+        });
+        if colors.is_empty() {
+            return;
+        }
+        let lowest_color = {
+            let (c, _) = colors.iter().min_by_key(|(_, s)| *s).unwrap();
+            c
+        };
+        self.moves.sort_unstable_by(|a, b| {
+            if a.color == *lowest_color && b.color != *lowest_color {
+                return Ordering::Less;
+            }
+            if b.color == *lowest_color && a.color != *lowest_color {
+                return Ordering::Greater;
+            }
+            a.min_y.cmp(&b.min_y)
+        });
+    }
+
     fn expand(&mut self, memo: &mut HashMap<String, Rc<RefCell<Eval>>>) -> bool {
         if !self.moves.is_empty() {
-            let selected_move = self
+            let mut uncharted_moves = self
                 .moves
                 .iter_mut()
                 .filter(|m| match &m.eval {
                     Some(e) => !e.as_ref().borrow().explored,
                     _ => true,
                 })
-                .choose(&mut rand::thread_rng());
-            //.next();
+                //.choose(&mut rand::thread_rng());
+                //.next();
+                .collect::<Vec<_>>();
 
-            if let Some(mov) = selected_move {
-                if !mov.simulate(&self.board, memo) {
-                    self.explored = self.moves.iter().all(|m| {
-                        m.eval
-                            .as_ref()
-                            .map(|e| e.as_ref().borrow().explored)
-                            .unwrap_or(false)
-                    });
-                }
+            let chosen = uncharted_moves.choose_weighted_mut(&mut rand::thread_rng(), |m| m.score);
+
+            if chosen.unwrap().simulate(&self.board, memo) {
+                self.explored = self.moves.iter().all(|m| {
+                    m.eval
+                        .as_ref()
+                        .map(|e| e.as_ref().borrow().explored)
+                        .unwrap_or(false)
+                });
             }
         }
+
         self.total_score = self
             .moves
             .iter()
@@ -295,6 +297,8 @@ impl Move {
                     let groups = explore_board(&new_board);
 
                     let moves = groups.iter().map(|g| Move {
+                        color: g.color,
+                        min_y: g.min_y,
                         eval: None,
                         pos: g.pos.clone(),
                         score: turn_score(g.pos.len()),
@@ -313,12 +317,14 @@ impl Move {
                         }
                     };
 
-                    let new_eval = Rc::new(RefCell::new(Eval {
+                    let mut new_eval = Eval {
                         total_score,
                         board: new_board,
                         moves,
                         explored,
-                    }));
+                    };
+                    new_eval.rank_groups();
+                    let new_eval = Rc::new(RefCell::new(new_eval));
                     memo.insert(cache_key, new_eval.clone());
                     self.eval = Some(new_eval);
                     !explored
@@ -340,11 +346,15 @@ fn main() {
             .iter()
             .map(|g| Move {
                 eval: None,
+                min_y: g.min_y,
+                color: g.color,
                 pos: g.pos.clone(),
                 score: turn_score(g.pos.len()),
             })
             .collect(),
     };
+
+    root.rank_groups();
 
     let mut max_score = 0;
 
