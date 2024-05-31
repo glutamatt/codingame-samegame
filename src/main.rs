@@ -1,3 +1,4 @@
+use rand::seq::IteratorRandom;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -76,7 +77,7 @@ fn explore_group(
     }
 }
 
-fn rank_groups(board: &[String], groups: &mut Vec<Group>) {
+fn rank_groups(_board: &[String], groups: &mut Vec<Group>) {
     let mut init: HashMap<char, usize> = HashMap::new();
 
     let colors = groups.iter().fold(&mut init, |c, g| {
@@ -209,6 +210,26 @@ struct Move {
 }
 
 impl Eval {
+    fn show_path(&self) {
+        print_debug(&self.board);
+        let next = self.moves.iter().max_by_key(|&m| {
+            m.eval
+                .as_ref()
+                .map(|r| {
+                    let rr = r.as_ref();
+                    let total = rr.borrow().total_score;
+                    total + m.score
+                })
+                .unwrap_or(0)
+        });
+
+        if let Some(best_move) = next {
+            if let Some(eval) = best_move.eval.as_ref() {
+                eval.borrow().show_path();
+            }
+        }
+    }
+
     fn expand(&mut self, memo: &mut HashMap<String, Rc<RefCell<Eval>>>) -> bool {
         if !self.moves.is_empty() {
             let selected_move = self
@@ -218,7 +239,8 @@ impl Eval {
                     Some(e) => !e.as_ref().borrow().explored,
                     _ => true,
                 })
-                .next();
+                .choose(&mut rand::thread_rng());
+            //.next();
 
             if let Some(mov) = selected_move {
                 if !mov.simulate(&self.board, memo) {
@@ -331,6 +353,8 @@ fn main() {
     while root.expand(&mut memo) {
         if root.total_score > max_score {
             max_score = root.total_score;
+
+            root.show_path();
 
             //let mut current = Some(&root);
             //let mut sc = 0;
